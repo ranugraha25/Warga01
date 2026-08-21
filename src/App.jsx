@@ -29,7 +29,7 @@ const mapResident = (r) => ({
   id: r.id, nama: r.nama, nik: r.nik, tglLahir: r.tgl_lahir, alamat: r.alamat,
   status: r.status, hp: r.hp, kkId: r.kk_id,
 });
-const mapFamily = (f) => ({ id: f.id, nama: f.nama, alamat: f.alamat });
+const mapFamily = (f) => ({ id: f.id, nama: f.nama, alamat: f.alamat, nomorKk: f.nomor_kk });
 const mapIuran = (i) => ({ id: i.id, nama: i.nama, nominal: i.nominal, temporary: i.temporary });
 const mapPayment = (p) => ({ id: p.id, kkId: p.kk_id, iuranId: p.iuran_id, periode: p.periode, lunas: p.lunas, tanggal: p.tanggal });
 const mapReminder = (r) => ({
@@ -88,8 +88,8 @@ function AuthenticatedApp({ session, profile, logout }) {
 
   const fetchAll = async () => {
     const [res, fam, iur, pay, rem] = await Promise.all([
-      supabase.from("residents").select("*").order("id"),
-      supabase.from("families").select("*").order("id"),
+      supabase.from("residents_view").select("*").order("id"),
+      supabase.from("families_view").select("*").order("id"),
       supabase.from("iuran_types").select("*").order("id"),
       supabase.from("payments").select("*"),
       supabase.from("reminders").select("*").order("waktu", { ascending: false }).limit(200),
@@ -172,7 +172,7 @@ function AuthenticatedApp({ session, profile, logout }) {
 
   // ---------- CRUD: family ----------
   const upsertFamily = async (data, editingId) => {
-    const payload = { nama: data.nama, alamat: data.alamat };
+    const payload = { nama: data.nama, alamat: data.alamat, nomor_kk: data.nomorKk || null };
     try {
       let row;
       if (editingId) {
@@ -324,7 +324,7 @@ function AuthenticatedApp({ session, profile, logout }) {
         )}
         {tab === "reminder" && canEdit && <ReminderTab db={db} logReminder={logReminder} showToast={showToast} />}
         {tab === "broadcast" && <BroadcastTab db={db} logReminder={logReminder} showToast={showToast} />}
-        {tab === "users" && canEdit && <ManageUsers session={session} />}
+        {tab === "users" && canEdit && <ManageUsers />}
       </main>
     </div>
   );
@@ -543,15 +543,19 @@ function WargaTab({ db, familyMap, upsertResident, deleteResident, exportResiden
       <div className="card" style={{ overflowX: "auto" }}>
         <table className="rt-table">
           <thead>
-            <tr><th>ID</th><th>Nama</th><th>NIK</th><th>Tgl Lahir</th><th>No. Rumah</th><th>Status</th><th>KK</th>{canEdit && <th></th>}</tr>
+            <tr><th>ID</th><th>Nama</th>{canEdit && <><th>NIK</th><th>Tgl Lahir</th></>}<th>No. Rumah</th><th>Status</th><th>KK</th>{canEdit && <th></th>}</tr>
           </thead>
           <tbody>
             {filtered.map((r) => (
               <tr key={r.id}>
                 <td><span className="id-tag">{fmtW(r.id)}</span></td>
                 <td style={{ fontWeight: 600 }}>{r.nama}</td>
-                <td style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{r.nik}</td>
-                <td>{fmtDate(r.tglLahir)}</td>
+                {canEdit && (
+                  <>
+                    <td style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{r.nik}</td>
+                    <td>{fmtDate(r.tglLahir)}</td>
+                  </>
+                )}
                 <td>No. {r.alamat}</td>
                 <td>{r.status}</td>
                 <td>{r.kkId ? familyMap[r.kkId]?.nama : <span style={{ opacity: 0.4 }}>belum digabung</span>}</td>
@@ -564,7 +568,7 @@ function WargaTab({ db, familyMap, upsertResident, deleteResident, exportResiden
                 )}
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={canEdit ? 8 : 7}><Empty text="Belum ada data warga." /></td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={canEdit ? 8 : 6}><Empty text="Belum ada data warga." /></td></tr>}
           </tbody>
         </table>
       </div>
@@ -659,7 +663,7 @@ function KKTab({ db, residentsByFamily, upsertFamily, deleteFamily, upsertIuran,
         <table className="rt-table">
           <thead>
             <tr>
-              <th>ID KK</th><th>Nama KK</th><th>No. Rumah</th><th>Anggota</th>
+              <th>ID KK</th><th>Nama KK</th>{canEdit && <th>Nomor KK</th>}<th>No. Rumah</th><th>Anggota</th>
               {db.iuranTypes.map((it) => <th key={it.id}>{it.nama}</th>)}
               {canEdit && <th></th>}
             </tr>
@@ -669,6 +673,7 @@ function KKTab({ db, residentsByFamily, upsertFamily, deleteFamily, upsertIuran,
               <tr key={f.id}>
                 <td><span className="id-tag">{fmtKK(f.id)}</span></td>
                 <td style={{ fontWeight: 600 }}>{f.nama}</td>
+                {canEdit && <td style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{f.nomorKk || "-"}</td>}
                 <td>No. {f.alamat}</td>
                 <td>
                   <button className="rt-btn ghost" style={{ padding: "4px 8px", fontSize: 12 }} onClick={() => setOpenKK(f.id)}>
@@ -701,7 +706,7 @@ function KKTab({ db, residentsByFamily, upsertFamily, deleteFamily, upsertIuran,
                 )}
               </tr>
             ))}
-            {db.families.length === 0 && <tr><td colSpan={4 + db.iuranTypes.length + (canEdit ? 1 : 0)}><Empty text="Belum ada KK." /></td></tr>}
+            {db.families.length === 0 && <tr><td colSpan={5 + db.iuranTypes.length + (canEdit ? 1 : 0)}><Empty text="Belum ada KK." /></td></tr>}
           </tbody>
         </table>
       </div>
@@ -735,12 +740,16 @@ function familyLabel(families, id) {
 }
 
 function FamilyForm({ initial, onClose, onSave }) {
-  const [f, setF] = useState({ nama: initial.nama || "", alamat: initial.alamat || "" });
+  const [f, setF] = useState({ nama: initial.nama || "", alamat: initial.alamat || "", nomorKk: initial.nomorKk || "" });
   return (
     <Modal title={initial.id ? `Edit KK — ${fmtKK(initial.id)}` : "Buat KK Baru"} onClose={onClose}>
       <Field label="Nama Keluarga"><input className="rt-input" value={f.nama} onChange={(e) => setF({ ...f, nama: e.target.value })} placeholder="Keluarga Budi" /></Field>
       <div style={{ height: 10 }} />
       <Field label="No. Rumah"><input className="rt-input" value={f.alamat} onChange={(e) => setF({ ...f, alamat: e.target.value })} /></Field>
+      <div style={{ height: 10 }} />
+      <Field label="Nomor KK (nomor Kartu Keluarga asli, opsional)">
+        <input className="rt-input" value={f.nomorKk} onChange={(e) => setF({ ...f, nomorKk: e.target.value })} maxLength={16} placeholder="16 digit nomor KK" />
+      </Field>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>
         <button className="rt-btn ghost" onClick={onClose}>Batal</button>
         <button className="rt-btn" disabled={!f.nama} onClick={() => onSave(f)}>Simpan</button>
